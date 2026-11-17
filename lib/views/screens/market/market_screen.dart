@@ -1,18 +1,17 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:hhmmobile/views/widgets/market/market_overview.dart';
 import 'package:provider/provider.dart';
 
-import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_dimens.dart';
 import '../../../core/utils/extensions/context_x.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../data/model/crypto/coin_market.dart';
-import '../../../data/model/system/global_stats.dart';
+
 import '../../../providers/base_view_model.dart';
 import '../../../providers/market_provider.dart';
 import '../../widgets/coin_logo.dart';
-import '../../widgets/common/app_widget.dart';
 import '../../widgets/price_change.dart';
 import '../../widgets/state/state_views.dart';
 
@@ -93,7 +92,7 @@ class _MarketScreenState extends State<MarketScreen> {
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.all(AppSpacing.screenPadding),
-                    child: _GlobalStatsRow(global: viewModel.global),
+                    child: GlobalStatsRow(global: viewModel.global),
                   ),
                 ),
                 SliverToBoxAdapter(child: _FilterBar(viewModel: viewModel)),
@@ -148,77 +147,6 @@ class _MarketScreenState extends State<MarketScreen> {
           SliverToBoxAdapter(child: _ListFooter(viewModel: viewModel)),
         ],
     };
-  }
-}
-
-class _GlobalStatsRow extends StatelessWidget {
-  const _GlobalStatsRow({required this.global});
-
-  final GlobalStats? global;
-
-  @override
-  Widget build(BuildContext context) {
-    final stats = global;
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(
-            child: _StatCard(
-              title: 'Giá trị vốn hóa thị trường toàn cầu',
-              value: Formatters.usdCompact(stats?.totalMarketCap['usd']),
-              change: stats?.marketCapChangePercentage24hUsd,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: _StatCard(
-              title: 'Khối lượng trong 24h',
-              value: Formatters.usdCompact(stats?.totalVolume['usd']),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  const _StatCard({required this.title, required this.value, this.change});
-
-  final String title;
-  final String value;
-  final double? change;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppWidget(
-      color: context.isDarkMode
-          ? AppColors.surfaceVariantDark
-          : AppColors.surfaceVariant,
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: context.textStyles.bodySmall,
-          ),
-          const SizedBox(height: AppSpacing.sm),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              style: context.textStyles.titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ),
-          if (change != null) PriceChange(value: change),
-        ],
-      ),
-    );
   }
 }
 

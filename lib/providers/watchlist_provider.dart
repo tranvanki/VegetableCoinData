@@ -143,6 +143,8 @@ class WatchListProvider extends BaseViewModel {
     );
   }
 
+  ///void _setMarket(List<CoinMarketModel> data){
+  ///final byId}
   @override
   void dispose() {
     _cancelToken?.cancel('dispose');
