@@ -43,23 +43,23 @@ class Failure implements Exception {
   });
 
   const Failure.network(this.message, {this.cause, this.stackTrace})
-    : kind = FailureKind.network,
-      code = null,
-      statusCode = null,
-      fieldErrors = const {};
+      : kind = FailureKind.network,
+        code = null,
+        statusCode = null,
+        fieldErrors = const {};
 
   const Failure.unknown(this.message, {this.cause, this.stackTrace})
-    : kind = FailureKind.unknown,
-      code = null,
-      statusCode = null,
-      fieldErrors = const {};
+      : kind = FailureKind.unknown,
+        code = null,
+        statusCode = null,
+        fieldErrors = const {};
 
   const Failure.business(this.message, {this.code})
-    : kind = FailureKind.business,
-      statusCode = null,
-      fieldErrors = const {},
-      cause = null,
-      stackTrace = null;
+      : kind = FailureKind.business,
+        statusCode = null,
+        fieldErrors = const {},
+        cause = null,
+        stackTrace = null;
 
   final FailureKind kind;
 
@@ -86,14 +86,14 @@ class Failure implements Exception {
       kind == FailureKind.server || kind == FailureKind.unknown;
 
   Failure copyWith({String? message, String? code}) => Failure(
-    kind: kind,
-    message: message ?? this.message,
-    code: code ?? this.code,
-    statusCode: statusCode,
-    fieldErrors: fieldErrors,
-    cause: cause,
-    stackTrace: stackTrace,
-  );
+        kind: kind,
+        message: message ?? this.message,
+        code: code ?? this.code,
+        statusCode: statusCode,
+        fieldErrors: fieldErrors,
+        cause: cause,
+        stackTrace: stackTrace,
+      );
 
   @override
   String toString() =>

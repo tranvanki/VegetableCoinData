@@ -1,50 +1,31 @@
-# Market (tab "Chart Thị trường")
+# Thị trường
 
-Screen: `lib/views/screens/market/market_screen.dart` (đã dựng: thẻ toàn cầu, chip Tất cả/Xu thế, bảng sắp xếp được, phân trang).
-Repository: `lib/data/repository/market_repository.dart` (`getMarkets`, `getGlobalStats`, `getTrendingCoinIds`, `getCategories`).
-Provider: `lib/providers/market_provider.dart` (`MarketProvider`).
-Khuôn dựng: xem `docs/architecture/repositories-providers.md`.
+## Hiện tại
 
-## Workflow
-1. Screen mở → `MarketProvider.init()` → `runInitial` → loading; song song `_loadGlobal` nạp `/global` (lỗi thì thẻ hiện `—`, không đổi trạng thái màn hình).
-2. `MarketRepository.getMarkets(vsCurrency, page, perPage, sparkline, coinIds)` dựng query.
-3. `ApiClient.get(ApiEndpoints.coinMarkets)` với `Parsers.listOf(CoinMarketModel.fromJson)`.
-4. `GET /coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h`.
-5. VM giữ trang trong RAM; `ready | empty | error`.
-6. Sort cục bộ (hạng, giá, 24h, vốn hoá) — không gọi lại mạng; bấm lại cột để đảo chiều.
-7. Cuộn cách đáy < 400px → `loadMore()`; chặn bằng `isBusy` + `hasMore`. Lỗi → `loadMoreFailed` + nút "Thử lại" (không tự gọi lại, tránh dồn request khi 429).
-8. Pull-to-refresh → `refresh()` giữ hàng cũ tới khi có response.
-9. Chip "Xu thế" → `getTrendingCoinIds()` rồi `getMarkets(coinIds:)`; không phân trang.
-10. HTTP 429 → `FailureKind.rateLimited`.
+`MarketScreen` dùng `MarketProvider` và `MarketRepository` để lấy thị trường,
+thẻ toàn cầu và xu hướng CoinGecko. Bảng có sort cục bộ và phân trang; đây
+không phải dữ liệu Binance.
 
-## Bước sau
-- Chạm hàng → chi tiết coin (`/coins/:id`, chưa có route/`CoinDetail`).
-- Chip "Trên chuỗi" (`/onchain/networks/trending_pools`, dữ liệu là pool).
-- Sparkline trong thẻ thống kê + thẻ "Tóm tắt": không có nguồn trong `all_api_formatted.md`.
-- Đổi tiền tệ hiển thị (USD/BTC/VND), lọc nâng cao.
+## Dự kiến Binance
 
-## Files
-| File | Purpose |
+- Bảng hiển thị cặp Spot và giá theo quote asset, % 24h rolling và khối lượng
+  base/quote được ghi đơn vị. Lấy snapshot REST và nhận ticker stream.
+- `exchangeInfo` không cung cấp trang xếp hạng theo vốn hóa; phân trang
+  CoinGecko hiện tại không thể chuyển nguyên trạng. Có thể phân trang **hiển
+  thị cục bộ** sau khi nạp tập cặp phù hợp, không giả làm phân trang API.
+- Bỏ hoặc ẩn cột hạng/vốn hóa, chip xu hướng tìm kiếm và thẻ toàn cầu cho tới
+  khi có quyết định sản phẩm. Có thể đề xuất sắp xếp theo giá, % hoặc volume
+  của cùng quote, nhưng không gọi đó là vốn hóa/xu hướng toàn thị trường.
+- Cập nhật theo symbol và giới hạn rebuild; hiển thị trạng thái stale/lỗi.
+
+## Hàm cần thay đổi
+
+| Hiện có | Hướng chuyển đổi |
 |---|---|
-| `lib/data/model/crypto/coin_market.dart` | DTO `CoinMarketModel`: id, symbol, giá, vốn hoá, hạng, biến động 24h và sparkline. |
-| `lib/data/repository/market_repository.dart` | `getMarkets`, `getGlobalStats` (cache 60s), `getTrendingCoinIds`, `getCategories`. |
-| `lib/core/network/api_endpoints.dart` | `coinMarkets`, `global`, `trending`. |
-| `lib/providers/market_provider.dart` | Page, list, filter, sort, load/refresh/loadMore. |
-| `lib/views/screens/market/market_screen.dart` | Tab 1: thẻ toàn cầu + chip + bảng. |
-| `lib/views/widgets/state/state_views.dart` | Loading, error, empty. |
+| `MarketProvider.init()`, `load()`, `refresh()` | Nạp cặp/snapshot và đăng ký ticker; không dùng `/global`. |
+| `setSort()`, `_sorted()` | Chỉ sort theo trường có thật, so sánh volume đúng đơn vị. |
+| `setFilter()` | Bỏ bộ lọc `trending` nếu không có nguồn tương đương. |
+| `loadMore()`, `retryLoadMore()` | Thiết kế lại theo phân trang UI, không giả định Binance có `page`. |
+| `dispose()` | Giải phóng subscription/kết nối theo quyền sở hữu. |
 
-## Functions
-| Symbol | Purpose | Logic |
-|---|---|---|
-| `MarketRepository.getMarkets()` | Fetch page | Dựng query; `_api.get(..., parser: Parsers.listOf(CoinMarketModel.fromJson))`. |
-| `MarketProvider.init()` | Nạp lần đầu | `load()` một lần. |
-| `setFilter(MarketFilter)` | Tất cả / Xu thế | Xoá bảng cũ, `load()`. |
-| `setSort(MarketSort)` | Sắp xếp | Sort bản sao cục bộ; cột mới: hạng tăng dần, còn lại giảm dần; thiếu dữ liệu xuống cuối. |
-| `loadMore()` / `retryLoadMore()` | Phân trang | `page+1`; dừng khi trang ngắn hơn `pageSize`; lỗi thì chờ thử lại. |
-| `refresh()` | Pull-to-refresh | `runAction`; giữ bảng cũ khi lỗi. |
-
-## Widgets / Syntax
-- `CustomScrollView` + `SliverList.separated`; `NotificationListener<ScrollNotification>` để nạp thêm.
-- `ChoiceChip` cho bộ lọc; tiêu đề cột là `InkWell` để sắp xếp.
-- `FittedBox(scaleDown)` cho ô số để không tràn khi chữ lớn.
-- Màu theo dấu: `PriceChange` (mũi tên + màu `AppColors.success`/`error`).
+Kiểm thử sort, số thiếu, các quote khác nhau, delta từng cặp và reconnect.

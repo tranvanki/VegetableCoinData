@@ -1,118 +1,64 @@
-# CryptoCoin.MobileApp
+# Ứng dụng thông tin thị trường tiền mã hóa
 
-Ứng dụng di động (Flutter) cung cấp thông tin thị trường Bitcoin và tiền điện tử thời gian thực, sử dụng hoàn toàn **Free CoinGecko API**.
+Ứng dụng Flutter chỉ đọc dữ liệu thị trường. Tài liệu này mô tả hiện trạng và
+kế hoạch chuyển sang **Binance Spot**; việc chuyển đổi **chưa được triển khai**.
 
-Kiến trúc chuẩn **MVVM + Provider**, không sử dụng cơ sở dữ liệu cục bộ (No DB/SQL), áp dụng Dependency Injection bằng `get_it`, định tuyến bằng `go_router`, và mọi lệnh gọi mạng trả về `Result<T>` để xử lý lỗi an toàn.
+## Hiện trạng
 
-> **View chỉ hiển thị – Provider điều phối – Repository gọi CoinGecko API – Model giữ dữ liệu.**
+- Mã hiện tại dùng CoinGecko REST qua `DioApiClient`, `CoinRepository` và
+  `MarketRepository`. `ApiEndpoints` và cấu hình hiện vẫn là CoinGecko.
+- Dự án dùng Provider/ChangeNotifier, `get_it`, `go_router` và `Result<T>`.
+  Watchlist và một số tùy chọn được lưu cục bộ bằng `LocalStorage`.
+- Bản sửa đang làm ở token list vẫn gọi CoinGecko, nạp `TokenModel` rồi thay
+  danh sách bằng `CoinMarketModel` khi polling. Đây là hai kiểu khác nhau;
+  cần sửa trước khi đưa vào sử dụng.
 
----
+## Mục tiêu: chỉ Binance
 
-## 1. Scope & Phạm vi dự án
+| Nhu cầu | Thiết kế dự kiến | Giới hạn |
+|---|---|---|
+| Danh sách, tìm kiếm | REST `exchangeInfo`, lọc cặp Spot cục bộ | Là danh sách cặp giao dịch, không phải toàn bộ coin/token. |
+| Giá và 24h | REST ticker ban đầu + WebSocket Streams | Giá và khối lượng thuộc một cặp trên Binance, không phải toàn thị trường. |
+| Biểu đồ | REST klines + stream kline của cặp | Chỉ có lịch sử giao dịch của cặp trên Binance. |
+| Watchlist | Lưu symbol của cặp, nhận ticker tương ứng | Cần chuyển đổi dữ liệu ID CoinGecko cũ, không xóa dữ liệu không ánh xạ được. |
+| Vốn hóa, xếp hạng, tỷ trọng BTC, ngành, coin xu hướng | Chưa có nguồn tương đương trong Binance Spot market data | Không giả lập bằng dữ liệu sàn; cần thay đổi hoặc ẩn tính năng. |
+| Tên đầy đủ, logo, mô tả, contract, nguồn cung | Chưa có nguồn tương đương trong các endpoint dự kiến | Không hứa thay thế; hiển thị rõ dữ liệu không có. |
 
-- **Chỉ đọc và hiển thị (Read-only):** Lấy dữ liệu thông tin thị trường, danh sách coin, giá thời gian thực, và biểu đồ lịch sử để hiển thị cho người dùng.
-- **Nguồn dữ liệu duy nhất:** Kết nối trực tiếp tới **CoinGecko Free REST API** (`https://api.coingecko.com/api/v3`), không thông qua Backend Intermediate/BFF.
-- **Không lưu trữ cơ sở dữ liệu (No DB/SQL):** Không sử dụng SQLite, Hive, Isar hay bất kỳ cơ sở dữ liệu quan hệ/phi quan hệ nào. Dữ liệu được quản lý hoàn toàn trên bộ nhớ tạm (In-Memory State) và polling cập nhật trực tiếp từ API.
+USDT không phải USD: nhãn và định dạng phải thể hiện đúng quote asset
+(`BTC/USDT`), không tự nhận là giá USD.
 
----
+## Tài liệu
 
-## 2. Kiến trúc & Công nghệ
+- [Endpoint và hợp đồng Binance dự kiến](all_api_formatted.md).
+- [Kiến trúc repository/provider và vòng đời kết nối](docs/architecture/repositories-providers.md).
+- [Danh sách tài liệu chức năng](docs/features/home.md), gồm
+  [token list](docs/features/token-list.md), [thị trường](docs/features/market.md),
+  [theo dõi](docs/features/watchlist.md), [tìm kiếm](docs/features/search.md),
+  [chi tiết](docs/features/coin-detail.md), [biểu đồ](docs/features/market-chart.md),
+  [tổng quan](docs/features/global-stats.md) và [điều hướng](docs/features/navigation-shell.md).
+- [Kế hoạch ban đầu](binance_plan.md) nói về **WebSocket API** dạng request/response;
+  giá đẩy liên tục dùng **WebSocket Streams**, là giao thức/địa chỉ khác.
 
-- **Framework:** Flutter 3.32+ / Dart 3.6+
-- **Pattern:** MVVM (Model - View - ViewModel) + Provider (`MultiProvider` / `ChangeNotifier`)
-- **Dependency Injection (DI):** `get_it` làm Service Locator chính
-- **Navigation:** `go_router` hỗ trợ định tuyến khai báo và truyền tham số (ví dụ: chuyển từ danh sách tới chi tiết coin)
-- **Networking:** `dio` với cấu hình Interceptor, Debouncer, xử lý timeout và tỷ lệ giới hạn (Rate Limit 429) của CoinGecko Free Tier
-- **Error Handling:** Pattern `Result<T>` (`Ok` / `Err`) loại bỏ ngoại lệ `throw` xuyên suốt các tầng ứng dụng
+## Cách chạy và kiểm tra
 
----
+Cần Flutter SDK tương thích với ràng buộc Dart trong `pubspec.yaml`
+(`>=3.6.0 <4.0.0`).
 
-## 3. Cấu trúc thư mục
-
-```text
-lib/
-├─ main.dart                  # Khởi chạy ứng dụng và bootstrap DI
-├─ app/
-│  ├─ app.dart                # MaterialApp.router + Theme (Dark/Light crypto) + i18n
-│  ├─ app_bootstrap.dart      # runZonedGuarded, đăng ký DI, khởi tạo dịch vụ
-│  ├─ di/
-│  │  ├─ service_locator.dart # Đăng ký get_it cho Repository, DioApiClient và ViewModel
-│  │  └─ app_providers.dart   # Cấu hình MultiProvider toàn cục
-│  ├─ router/
-│  │  └─ app_router.dart      # Định tuyến go_router (Home Market -> Coin Detail -> Search)
-│  └─ theme/                  # Bảng màu tài chính (Xanh tăng/Đỏ giảm), Typography, CardTheme
-├─ core/
-│  ├─ config/                 # AppConfig, AppConstants (API Base URL, Polling Interval)
-│  ├─ error/                  # Failure, FailureKind, ErrorMapper (Xử lý lỗi API 429 Rate Limit, 500, Mất mạng)
-│  ├─ network/                # ApiClient, DioApiClient, CoinGecko Endpoints
-│  ├─ result/                 # Result<T> (Ok / Err functional pattern)
-│  └─ utils/                  # Logger, Currency/Percent Formatters ($#,##0.00, +/-%), Debouncer
-├─ data/
-│  ├─ models/                 # DTOs (CoinModel, MarketChartModel, GlobalStatsModel, CoinDetailModel)
-│  └─ repositories/           # CryptoRepository (thực thi gọi CoinGecko API)
-├─ providers/                 # ViewModel (ChangeNotifier), kế thừa BaseViewModel (MarketProvider, CoinDetailProvider)
-├─ views/
-│  ├─ screens/                # Màn hình danh sách thị trường, chi tiết coin, tìm kiếm
-│  └─ widgets/                # Widget dùng chung (Card coin, biểu đồ mini sparkline, trạng thái loading/error/empty)
-└─ i18n/                      # File ngôn ngữ (vi_VN.json, en_US.json)
-```
-
----
-
-## 4. Hướng dẫn chạy dự án
-
-### Yêu cầu môi trường
-- **Flutter SDK:** 3.32.0 trở lên
-- **Dart SDK:** 3.6.0 trở lên
-
-### Lệnh chạy ứng dụng
-
-1. Tải các gói phụ thuộc:
 ```powershell
 flutter pub get
-```
-
-2. Chạy ứng dụng ở chế độ Debug:
-```powershell
 flutter run
-```
-
-3. Kiểm tra mã nguồn và chạy Test:
-```powershell
 flutter analyze
 flutter test
 ```
 
-4. Biệt dịch Release:
-```powershell
-# Chạy cho Android
-flutter build apk --release
+Sau khi triển khai, kiểm thử snapshot, stream, reconnect, trạng thái mạng và
+chuyển dữ liệu watchlist bằng fake server; kiểm tra thực tế trên Android/iOS
+và mạng/địa bàn triển khai. Không coi việc có kết nối Internet là bảo đảm
+Binance có thể truy cập.
 
-# Chạy cho iOS (Yêu cầu macOS & Xcode)
-flutter build ipa --release
-```
+## Nguồn tham khảo
 
----
-
-## 5. Tích hợp CoinGecko API
-
-Ứng dụng sử dụng các endpoint miễn phí từ CoinGecko:
-
-| Chức năng | Endpoint | Mô tả |
-| --- | --- | --- |
-| **Danh Sách Token** | `GET /coins/list` | danh sách các coin/token  |
-| **Bảng giá thị trường** | `GET /coins/markets` | Lấy danh sách Top coin theo vốn hóa, giá thực, biến động 24h |
-| **Chi tiết Đồng coin** | `GET /coins/{id}` | Lấy thông tin chi tiết, tổng cung, vốn hóa, giá cao/thấp 24h |
-| **Biểu đồ lịch sử** | `GET /coins/{id}/market_chart` | Lấy dữ liệu giá biến động theo các mốc (1 ngày, 7 ngày, 30 ngày) |
-| **Tìm kiếm Coin** | `GET /search` | Tìm kiếm coin/token theo tên hoặc mã symbol (`?query=`) |
-| **Xu hướng** | `GET /search/trending` | Top coin đang được tìm kiếm nhiều |
-| **Toàn cảnh thị trường** | `GET /global` | Vốn hóa, khối lượng và tỷ trọng BTC toàn thị trường |
-
-
----
-
-## 6. Quy ước Mã nguồn & Xử lý Lỗi
-
-- **Không dùng `throw`:** Các hàm tại Repository luôn trả về `Result<T>`. Ví dụ: `Result<List<CoinModel>>`.
-- **Định dạng hiển thị:** Tất cả giá trị tiền tệ và phần trăm phải dùng định dạng chuẩn trong `core/utils/formatters.dart` (Ví dụ: `$65,420.50`, `+3.45%`).
-- **Xử lý Rate Limit (429):** Free API của CoinGecko có giới hạn lượt gọi (10-30 req/phút). `ErrorMapper` sẽ chuyển đổi lỗi 429 thành thông báo tiếng Việt gợi ý người dùng đợi trước khi làm mới.
+- [Binance Spot WebSocket Streams](https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md)
+- [Binance Spot REST API](https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md)
+- [Binance Spot WebSocket API](https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-api.md)
+- [Flutter: giao tiếp WebSocket](https://docs.flutter.dev/cookbook/networking/web-sockets)

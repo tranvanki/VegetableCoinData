@@ -5,7 +5,6 @@ import 'package:hhmmobile/core/utils/extensions/context_x.dart';
 import 'package:hhmmobile/providers/token_list_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-
 import '../../../app/router/app_routes.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_dimens.dart';

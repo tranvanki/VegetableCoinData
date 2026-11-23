@@ -1,66 +1,37 @@
-# Token List
+# Danh sách token / cặp giao dịch
 
-## Workflow
-1. `TokenList` mounts → post-frame calls `TokenListProvider.init()`.
-2. `init()` skips when `_initialized` or already loading; otherwise `load()`.
-3. `load()` → `runInitial` sets `ViewState.loading`.
-4. `CoinRepository.getTokens()` → `ApiClient.get(ApiEndpoints.coinsList)` with `Parsers.listOf(TokenModel.fromJson)`.
-5. `DioApiClient` calls `GET {baseUrl}/coins/list?include_platform=true`; HTTP/parse errors → `Failure`, never thrown.
-6. `onData`: copy list, sort by `name`, store `_tokens`, recompute `_filtered`; `runInitial` settles on `ready` or `empty`.
-7. Search field → `Debouncer(400ms)` → `setQuery()` → in-memory filter on `name | symbol | id` → `notifyListeners`.
-8. Pull-to-refresh or refresh button → `refresh()` → `load(isRefresh: true)`; `CoinRepository` trả cache RAM nếu bản cache chưa quá 60s (chặn refresh dồn dập), quá thì mới gọi lại `/coins/list`; failure → snackbar via `context.showFailure`.
-9. Row tap → `onTokenTap(token)`; parent screen decides the route.
-10. Screen dispose → `CancelToken.cancel('dispose')`.
+## Hiện tại
 
-## Files
-| File | Purpose |
+`TokenListProvider.load()` dùng `CoinRepository.getTokens()` lấy CoinGecko
+`/coins/list`; `TokenModel` có ID, tên, symbol và platforms. Tìm kiếm lọc trong
+bộ nhớ; repository cache và giới hạn refetch. Màn hình hiện đang được sửa để
+hiển thị `CoinMarketModel`, còn polling 20 giây thay danh sách bằng top 250
+CoinGecko. Hai kiểu không tương thích: row có thể lỗi khi nhận `TokenModel`,
+và danh mục đầy đủ biến thành 250 coin sau polling. Timer hiện chưa được hủy
+trong `dispose()`.
+
+## Dự kiến Binance
+
+1. Đổi khái niệm hiển thị sang **cặp Spot**, ví dụ `BTC/USDT`; không gọi là
+   danh mục toàn bộ token. Lấy cặp qua REST `exchangeInfo`, lọc theo quote và
+   trạng thái giao dịch theo chính sách sản phẩm.
+2. Lấy snapshot ticker rồi áp dụng stream vào model cặp có kiểu duy nhất.
+   Tìm theo symbol/base/quote cục bộ; không tìm tên đầy đủ nếu không có nguồn.
+3. Duy trì danh mục riêng với ticker: không thay toàn bộ danh sách bằng
+   event hoặc top 250. Hiển thị giá bằng quote asset; thiếu giá thì hiện `—`.
+4. Bộ lọc hạng/vốn hóa hiện tại không có dữ liệu Binance tương đương; bỏ hoặc
+   thay bằng tiêu chí được người dùng chấp thuận và ghi rõ đơn vị.
+5. Bỏ polling cũ sau khi có stream; xử lý refresh, reconnect, stale và
+   dispose theo [kiến trúc](../architecture/repositories-providers.md).
+
+## Hàm liên quan
+
+| Hiện có | Việc chuyển đổi |
 |---|---|
-| `lib/data/model/crypto/token_model.dart` | DTO: `id`, `symbol`, `name`, `platforms`; `fromJson`, `toJson`. |
-| `lib/data/repository/coin_repository.dart` | Wraps `/coins/list`; RAM cache + 60s refetch throttle; returns `Result<List<TokenModel>>`. |
-| `lib/providers/base_view_model.dart` | `ViewState`, `runInitial`, `runAction`, `safeNotify`, `failure`. |
-| `lib/providers/token_list_provider.dart` | Owns list, filtered list, query, load/refresh/init. |
-| `lib/views/screens/token_list.dart` | Header, search, list, loading/error/empty states. |
-| `lib/views/widgets/state/state_views.dart` | `LoadingView`, `ErrorView`, `EmptyView`, `ShimmerBox`. |
-| `lib/views/widgets/common/app_widget.dart` | `AppWidget`: Material card + InkWell + border. |
-| `lib/core/utils/debouncer.dart` | `Debouncer`: cancels pending filter on each keystroke. |
-| `lib/core/utils/formatters.dart` | `Formatters.number` for the count badge. |
+| `init()`, `load()`, `refresh()` | Lấy danh mục/snapshot, quản lý trạng thái và lỗi. |
+| `setQuery()`, `_applyQuery()` | Lọc model cặp có kiểu ổn định. |
+| `_setTokens()`, `_silentRefresh()` | Thay bằng gộp delta theo symbol; không trộn kiểu. |
+| `dispose()` | Hủy request, stream, timer và các callback đang chờ. |
 
-## Functions
-| Symbol | Purpose | Logic |
-|---|---|---|
-| `TokenListProvider.init()` | First load | `_initialized || isLoading` → return; else `load()`. |
-| `load()` | Whole-screen state | `runInitial(repo.getTokens)`, `isEmpty = data.isEmpty`. |
-| `refresh()` | Background refresh | `runAction`; `onData: _setTokens`; `ViewState` unchanged. |
-| `setQuery(String)` | Filter | trim + lowercase; same value → return; rebuild `_filtered`; notify. |
-| `_setTokens(List)` | Normalize | copy, sort `name`, assign `_tokens`, recompute `_filtered`. |
-| `_applyQuery()` | Filter predicate | `contains` on lowercased `name`, `symbol`, `id`. |
-| `dispose()` | Cancel in-flight | `cancelToken.cancel('dispose')`, then `super.dispose()`. |
-| `_TokenListState._refresh()` | Refresh + report | `await vm.refresh()`; show + clear `failure`. |
-
-## Wiring
-```dart
-// service_locator.dart
-sl.registerLazySingleton<CoinRepository>(
-  () => CoinRepository(apiClient: sl<ApiClient>()),
-);
-sl.registerFactory<TokenListProvider>(
-  () => TokenListProvider(repository: sl()),
-);
-
-// app_providers.dart
-ChangeNotifierProvider<TokenListProvider>(create: (_) => sl<TokenListProvider>()),
-
-// router branch
-GoRoute(path: AppRoutes.tokenList, builder: (_, __) => const TokenList()),
-```
-
-## Widgets / Syntax
-- `StatefulWidget` + `WidgetsBinding.instance.addPostFrameCallback` for first provider call.
-- `context.watch<T>()` (rebuild) vs `context.read<T>()` (one-shot).
-- `TextField` + `TextEditingController`; `onChanged` → debounce; `onSubmitted` → flush.
-- `InputDecoration(prefixIcon:, suffixIcon:)`.
-- `RefreshIndicator` + `ListView.separated` + `AlwaysScrollableScrollPhysics`.
-- `Column` + `Expanded`; `Row` + `Spacer`.
-- Exhaustive `switch` on `ViewState`.
-- `Container` + `BoxDecoration(shape: BoxShape.circle)` for the symbol avatar.
-- `context.textStyles`, `context.isDarkMode`, `context.showFailure` from `ContextX`.
+Kiểm thử nạp lần đầu, tìm kiếm, cập nhật một cặp không mất cặp khác, refresh,
+reconnect và dispose. Chi tiết stream: [API](../../all_api_formatted.md).

@@ -1,41 +1,31 @@
-# Home
+# Trang chủ
 
-## Workflow
-1. `HomeScreen` builds → reads `AppStateProvider` (online, config) and `HomeProvider`.
-2. `HomeProvider.init()` → `runInitial` loading.
-3. Parallel fetch: global snapshot + top markets + recently viewed (local) + trending search.
-4. Sections render independently: one failure shows an inline `ErrorView(compact: true)`; the rest still render.
-5. Recent viewed read from `LocalStorage.getRecentViewedTokensRaw()` — no network.
-6. Tap a coin → `/coin/:id`; tap "Xem tất cả" → token list / market route.
-7. Pull-to-refresh → `refresh()` → `runAction`; keeps old sections while reloading.
-8. Offline banner comes from `MainShell` via `AppStateProvider.isOnline` — Home does not own it.
+## Hiện tại
 
-## Files
-| File | Purpose |
-|---|---|
-| `lib/views/screens/home_screen.dart` | **Empty.** Section composition. |
-| `lib/providers/home_provider.dart` | **Missing.** Aggregate state for the sections. |
-| `lib/data/repository/market_repository.dart` | `getMarkets()` for top coins (TODO). |
-| `lib/data/repository/system_repository.dart` | Config/global calls. |
-| `lib/core/storage/local_storage.dart` | `getRecentViewedTokensRaw()`, `saveRecentViewedToken()`. |
-| `lib/views/widgets/common/app_widget.dart` | `SectionHeader`, `AppNetworkImage`, `AppWidget`. |
-| `lib/views/widgets/state/state_view.dart` | `LoadingView`, `ErrorView(compact)`, `EmptyView`, `OfflineBanner`. |
-| `lib/providers/app_state_provider.dart` | Connectivity, theme, remote config. |
+Điều hướng hiện dùng `HomeScreen` và `TokenList`; dữ liệu token/giá vẫn từ
+CoinGecko. Một số mô tả Home trước đây chỉ là kế hoạch, không nên coi các
+section hay `HomeProvider` là đã hoàn thành.
 
-## Functions (planned)
-| Symbol | Purpose | Logic |
-|---|---|---|
-| `HomeProvider.init()` | First load | `Future.wait` global + markets; recent viewed is sync. |
-| `HomeProvider.refresh()` | Reload | `runAction`; replace sections on success. |
-| `HomeProvider._loadRecent()` | Local list | Map raw JSON → `TokenModel`; cap 12. |
-| `HomeScreen._openCoin(TokenModel)` | Navigate | `context.push('/coin/${token.id}')`. |
-| `HomeScreen._buildSections()` | Layout | One `SliverList` per section; skip empty sections. |
+## Dự kiến Binance
 
-## Widgets / Syntax
-- `CustomScrollView` + `SliverToBoxAdapter` / `SliverList`.
-- `SectionHeader(title, subtitle, onMore)` for each block.
-- `GridView`/`SizedBox` horizontal `ListView` for top coins.
-- Pull-to-refresh via `RefreshIndicator`.
-- `context.watch<AppStateProvider>()` for the offline state.
-- `context.push` from `go_router`.
-- `Formatters.compact` / `Formatters.number`.
+- Hiển thị cặp Spot theo quote đã chọn từ `exchangeInfo`, snapshot giá và
+  cập nhật stream. Tìm kiếm, nhãn giá và xử lý thiếu dữ liệu theo
+  [token list](token-list.md).
+- Các mục toàn cầu/xu hướng CoinGecko không có nguồn tương đương trong phạm
+  vi Binance Spot; không tái hiện bằng giá trị suy đoán.
+- Dữ liệu đã xem/lịch sử cũ cần được bảo toàn khi đổi từ coin ID sang symbol
+  cặp; không tự gán cặp khi ánh xạ không rõ ràng.
+- Khi không kết nối hoặc stream bị ngắt, giữ dữ liệu cũ có nhãn stale và cho
+  phép thử lại; không báo live khi chưa đồng bộ thành công.
+
+## Hàm cần điều chỉnh
+
+Các hàm `TokenListProvider.init()`, `load()`, `refresh()` và `dispose()` cần
+chuyển theo [kiến trúc](../architecture/repositories-providers.md).
+Kiểm thử chuyển tab, foreground/background và dữ liệu cũ trong lưu trữ.
+
+## Tài liệu chức năng
+
+[Thị trường](market.md) · [Theo dõi](watchlist.md) · [Tìm kiếm](search.md) ·
+[Chi tiết](coin-detail.md) · [Biểu đồ](market-chart.md) ·
+[Tổng quan](global-stats.md) · [Điều hướng](navigation-shell.md).

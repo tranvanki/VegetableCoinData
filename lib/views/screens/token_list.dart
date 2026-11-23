@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:hhmmobile/core/result/result.dart';
+import 'package:hhmmobile/data/model/crypto/coin_market.dart';
 import 'package:provider/provider.dart';
 
 import '../../app/theme/app_colors.dart';
@@ -72,7 +74,6 @@ class _TokenListState extends State<TokenList> {
     final wasWatching = watchlist.isWatching(coinId);
     final succeeded = await watchlist.toggleCoin(coinId);
     if (!mounted) return;
-
     final failure = watchlist.failure;
     final message = failure?.message ??
         (succeeded
@@ -227,7 +228,7 @@ class _TokenListState extends State<TokenList> {
             itemBuilder: (context, index) {
               final token = tokens[index];
               return _TokenTile(
-                token: token,
+                coin: token,
                 isWatchlisted: watchlist.isWatching(token.id),
                 onWatchlistTap: () => _toggleWatchlist(watchlist, token.id),
                 onTap: widget.onTokenTap == null
@@ -243,19 +244,21 @@ class _TokenListState extends State<TokenList> {
 
 class _TokenTile extends StatelessWidget {
   const _TokenTile({
-    required this.token,
+    required this.coin,
     required this.isWatchlisted,
     required this.onWatchlistTap,
     this.onTap,
   });
 
-  final TokenModel token;
+  final CoinMarketModel coin;
   final bool isWatchlisted;
   final VoidCallback onWatchlistTap;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
+    final pct = coin.priceChangePercentage24h ?? 0;
+    final color = pct >= 0 ? AppColors.success : AppColors.error;
     return AppWidget(
       onTap: onTap,
       padding: const EdgeInsets.symmetric(
@@ -267,21 +270,32 @@ class _TokenTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _TokenAvatar(symbol: token.symbol, seed: token.id),
+          SizedBox(
+            width: 28,
+            child: Text(
+              '#${coin.marketCapRank ?? '-'}',
+              style: context.textStyles.labelSmall,
+            ),
+          ),
+          CircleAvatar(
+            radius: 16,
+            backgroundImage: NetworkImage(coin.image),
+            backgroundColor: Colors.transparent,
+          ),
           const SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  token.name,
+                  coin.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: context.textStyles.titleSmall,
                 ),
                 const SizedBox(height: AppSpacing.xxs),
                 Text(
-                  '${token.symbol.toUpperCase()} · ${token.id}',
+                  '${coin.symbol.toUpperCase()} · ${coin.id}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: context.textStyles.bodySmall,
@@ -289,15 +303,19 @@ class _TokenTile extends StatelessWidget {
               ],
             ),
           ),
-          if (token.platforms.isNotEmpty)
-            const Padding(
-              padding: EdgeInsets.only(left: AppSpacing.sm),
-              child: Icon(
-                Icons.account_balance_wallet_outlined,
-                size: AppSizes.iconSm,
-                color: AppColors.textDisabled,
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text('\$${Formatters.number(coin.currentPrice ?? 0)}',
+                style: context.textStyles.titleSmall),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(AppRadius.pill),
               ),
+              child: Text('${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(2)}%',
+                  style: context.textStyles.labelSmall?.copyWith(color: color)),
             ),
+          ]),
           IconButton(
             tooltip: isWatchlisted ? 'Bỏ theo dõi' : 'Thêm vào theo dõi',
             onPressed: onWatchlistTap,
@@ -312,50 +330,6 @@ class _TokenTile extends StatelessWidget {
               color: AppColors.textDisabled,
             ),
         ],
-      ),
-    );
-  }
-}
-
-class _TokenAvatar extends StatelessWidget {
-  const _TokenAvatar({required this.symbol, required this.seed});
-
-  final String symbol;
-  final String seed;
-
-  static const List<Color> _palette = [
-    AppColors.primary,
-    AppColors.secondary,
-    AppColors.info,
-    AppColors.success,
-    AppColors.accent,
-    AppColors.flashSale,
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final hash = seed.codeUnits.fold<int>(0, (sum, unit) => sum + unit);
-    final color = _palette[hash % _palette.length];
-    final label = symbol.length <= 3
-        ? symbol.toUpperCase()
-        : symbol.substring(0, 3).toUpperCase();
-
-    return Container(
-      width: 44,
-      height: 44,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        shape: BoxShape.circle,
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Text(
-        label,
-        style: context.textStyles.labelSmall?.copyWith(
-          color: color,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.2,
-        ),
       ),
     );
   }
