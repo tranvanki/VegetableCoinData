@@ -14,6 +14,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    buildFeatures {
+        resValues = true
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.bitcoindataapp"
@@ -29,6 +33,20 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+    }
+
+    flavorDimensions += "agent"
+    productFlavors {
+        create("codex") {
+            dimension = "agent"
+            applicationIdSuffix = ".codex"
+            resValue("string", "app_name", "Crypto Codex")
+        }
+        create("agy") {
+            dimension = "agent"
+            applicationIdSuffix = ".agy"
+            resValue("string", "app_name", "Crypto AGY")
+        }
     }
 
     buildTypes {
