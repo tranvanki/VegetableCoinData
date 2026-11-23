@@ -11,6 +11,8 @@ import '../../core/network/interceptors/retry_interceptor.dart';
 import '../../core/network/network_info.dart';
 import '../../core/utils/logger.dart';
 import '../../data/repository/coin_repository.dart';
+import '../../data/datasource/binance_market_local_data_source.dart';
+import '../../data/repository/binance_market_repository.dart';
 import '../../data/repository/market_repository.dart';
 import '../../data/repository/system_repository.dart';
 import '../../providers/app_state_provider.dart';
@@ -20,6 +22,7 @@ import '../../providers/market_provider.dart';
 import '../../providers/search_provider.dart';
 import '../../providers/token_list_provider.dart';
 import '../../providers/watchlist_provider.dart';
+import '../../providers/binance_market_view_model.dart';
 import '../../services/analytics_service.dart';
 import '../../services/app_update_service.dart';
 import '../../services/crash_service.dart';
@@ -85,6 +88,15 @@ Future<void> setupDependencies(AppConfig config) async {
   sl.registerLazySingleton<MarketRepository>(
     () => MarketRepository(apiClient: sl()),
   );
+  sl.registerLazySingleton<BinanceMarketLocalDataSource>(
+    () => BinanceMarketLocalDataSource(),
+  );
+  sl.registerLazySingleton<BinanceMarketRepository>(
+    () => BinanceMarketRepositoryImpl(
+      localDataSource: sl(),
+      networkInfo: sl(),
+    ),
+  );
   // ------------------------------- Service -------------------------------
   sl.registerLazySingleton<ShareService>(() => ShareService(config));
   sl.registerLazySingleton<AppUpdateService>(() => AppUpdateService(sl()));
@@ -116,6 +128,9 @@ Future<void> setupDependencies(AppConfig config) async {
 
   sl.registerFactory<MarketProvider>(() => MarketProvider(repository: sl()));
   sl.registerFactory<GlobalProvider>(() => GlobalProvider(repository: sl()));
+  sl.registerFactory<BinanceMarketViewModel>(
+    () => BinanceMarketViewModel(sl()),
+  );
 }
 
 // ----------------------------- Repository ------------------------------
