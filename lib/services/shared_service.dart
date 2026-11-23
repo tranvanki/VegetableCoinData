@@ -2,7 +2,6 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../core/config/app_config.dart';
-import '../core/config/app_constants.dart';
 import '../core/utils/logger.dart';
 
 /// Chia sẻ thông tin Coin, mở Block Explorer, Hotline hoặc trình duyệt ngoài.
