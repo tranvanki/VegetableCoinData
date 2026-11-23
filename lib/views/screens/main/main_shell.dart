@@ -57,6 +57,10 @@ class MainShell extends StatelessWidget {
             activeIcon: Icon(Icons.public_rounded),
             label: 'Chỉ số toàn cầu',
           ),
+          const BottomNavigationBarItem(
+              icon: Icon(Icons.person_2_outlined),
+              activeIcon: Icon(Icons.person_2_rounded),
+              label: 'Profile')
         ],
       ),
     );

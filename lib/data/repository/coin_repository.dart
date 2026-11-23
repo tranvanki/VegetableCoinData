@@ -20,6 +20,12 @@ class CoinRepository {
   /// lại toàn bộ ~22k token; chặn refresh dồn dập để không đốt rate limit 429.
   static const Duration _minRefetch = Duration(seconds: 60);
 
+  //------------------Filter junk coins---------------------
+  Future<Result<List<CoinMarketModel>>> getTopMarket({
+    ApiCancelToken? cancelToken,
+  }) =>
+      getCoin(perPage: 250, page: 1, cancelToken: cancelToken);
+
   /// `GET /coins/list` — toàn bộ token CoinGecko đang theo dõi.
   ///
   /// Endpoint trả một mảng phẳng (không phân trang), mỗi phần tử là

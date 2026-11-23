@@ -8,7 +8,9 @@ class ApiEndpoints {
 
   static const String coinsList = '/coins/list';
   static const String search = '/search';
-
+  // Lấy danh sách cặp và trạng thái giao dịch
+  static const String exchangeInfor =
+      'https://data-api.binance.vision/api/v3/exchangeInfo';
   // --- Tab 1 "Tiền mã hoá" (MarketScreen) ----------------------------------
   /// Bảng xếp hạng coin; `ids=` để lọc theo danh sách (Xu thế, Theo dõi).
   static const String coinMarkets = '/coins/markets';

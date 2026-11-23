@@ -5,6 +5,7 @@ import 'package:hhmmobile/core/storage/local_storage.dart';
 import 'package:hhmmobile/providers/app_state_provider.dart';
 import 'package:hhmmobile/providers/watchlist_provider.dart';
 import 'package:hhmmobile/services/navigation_service.dart';
+import 'package:hhmmobile/views/screens/binance_home_screen.dart';
 import 'package:hhmmobile/views/screens/watchlist/watchlist_select.dart';
 import 'package:provider/provider.dart';
 import 'package:hhmmobile/views/screens/globalStats/global_screen.dart';
@@ -138,7 +139,7 @@ class AppRouter {
               routes: [
                 GoRoute(
                   path: AppRoutes.home,
-                  builder: (context, state) => const HomeScreen(),
+                  builder: (context, state) => const BinanceHomeScreen(),
                 ),
               ],
             ),

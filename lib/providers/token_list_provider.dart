@@ -1,5 +1,9 @@
+import 'dart:async';
+
+import 'package:hhmmobile/data/model/crypto/coin_market.dart';
+
 import '../core/network/api_client.dart';
-import '../data/model/crypto/token_model.dart';
+
 import '../data/repository/coin_repository.dart';
 import 'base_view_model.dart';
 
@@ -14,25 +18,40 @@ class TokenListProvider extends BaseViewModel {
   final CoinRepository _repository;
 
   ApiCancelToken? _cancelToken;
-  List<TokenModel> _tokens = const [];
-  List<TokenModel> _filtered = const [];
+  List<dynamic> _tokens = const [];
+  List<dynamic> _filtered = const [];
   String _query = '';
   bool _initialized = false;
 
   /// Danh sách sau khi lọc theo [query].
-  List<TokenModel> get tokens => _filtered;
+  List<dynamic> get tokens => _filtered;
 
   /// Toàn bộ token đã tải — dùng cho badge đếm.
-  List<TokenModel> get allTokens => _tokens;
+  List<dynamic> get allTokens => _tokens;
 
   int get totalCount => _tokens.length;
   String get query => _query;
   bool get hasQuery => _query.isNotEmpty;
 
+  static const int _topRank = 250;
+  static const double _minVolumeUsd = 1000000;
+  static const Duration _pollInterval = Duration(seconds: 20);
+  bool _hideJunk = true;
+  bool get hideJunk => _hideJunk;
+
+  void toggleHideJunk(bool value) {
+    if (_hideJunk == value) return;
+    _hideJunk = value;
+    _filtered = _applyQuery();
+    safeNotify();
+  }
+
   /// Gọi khi màn hình mở. Đã có dữ liệu thì không gọi lại API.
   Future<void> init() async {
     if (_initialized || isLoading) return;
     await load();
+    _initialized = true;
+    _startPolling();
   }
 
   /// Nạp lần đầu: loading → ready / empty / error.
@@ -43,7 +62,7 @@ class TokenListProvider extends BaseViewModel {
     _cancelToken = cancelToken;
 
     // Khai báo rõ ràng kiểu dữ liệu trả về cho hàm runInitial
-    await runInitial<List<TokenModel>>(
+    await runInitial(
       () => _repository.getTokens(
         cancelToken: cancelToken,
         forceRefresh: isRefresh,
@@ -78,27 +97,61 @@ class TokenListProvider extends BaseViewModel {
     safeNotify();
   }
 
-  void _setTokens(List<TokenModel> data) {
+  void _setTokens(List<dynamic> data) {
     final sorted = [...data]
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     _tokens = List.unmodifiable(sorted);
     _filtered = _applyQuery();
   }
 
-  List<TokenModel> _applyQuery() {
-    if (_query.isEmpty) return _tokens;
-    return List.unmodifiable(
-      _tokens.where((token) {
-        return token.name.toLowerCase().contains(_query) ||
-            token.symbol.toLowerCase().contains(_query) ||
-            token.id.toLowerCase().contains(_query);
-      }),
-    );
+//_isQUanlity + ?? to chekc null
+  bool _isQuanlity(CoinMarketModel c) =>
+      (c.marketCapRank ?? 1 << 30) <= _topRank &&
+      (c.totalVolume ?? 0) > _minVolumeUsd;
+
+  List<dynamic> _applyQuery() {
+    Iterable<dynamic> list = _tokens;
+    if (_hideJunk) {
+      // Token-list results do not include market data; apply this filter only
+      // to market results, where rank and volume are available.
+      list = list.where((c) => c is! CoinMarketModel || _isQuanlity(c));
+    }
+    if (_query.isNotEmpty) {
+      list = list.where((c) =>
+          c.name.toLowerCase().contains(_query) ||
+          c.symbol.toLowerCase().contains(_query) ||
+          c.id.toLowerCase().contains(_query));
+    }
+    return List.unmodifiable(list);
   }
 
   @override
   void dispose() {
     _cancelToken?.cancel('dispose');
     super.dispose();
+  }
+
+  //-----Real-time updates every 20 seconds--------//
+  Timer? _timer;
+
+  void _startPolling() {
+    _timer?.cancel();
+    _timer = Timer.periodic(_pollInterval, (_) => _silentRefresh());
+  }
+
+  bool _polling = false;
+  Future<void> _silentRefresh() async {
+    if (_polling || isLoading || isBusy) return;
+    _polling = true;
+    try {
+      final result = await _repository.getTopMarket();
+      final data = result.dataOrNull;
+      if (result.isOk && data != null && data.isNotEmpty) {
+        _setTokens(data); // update data only
+        safeNotify(); // state stays ViewState.ready, so there is no loading flicker
+      }
+    } finally {
+      _polling = false;
+    }
   }
 }

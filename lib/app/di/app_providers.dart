@@ -8,6 +8,7 @@ import '../../providers/app_state_provider.dart';
 
 // import '../../providers/notification_provider.dart';
 import '../../providers/global_provider.dart';
+import '../../providers/binance_market_view_model.dart';
 import '../../providers/market_provider.dart';
 import '../../providers/search_provider.dart';
 import '../../providers/token_list_provider.dart';
@@ -68,6 +69,9 @@ List<SingleChildWidget> buildAppProviders() => [
       ),
       ChangeNotifierProvider<GlobalProvider>(
         create: (_) => sl<GlobalProvider>(),
+      ),
+      ChangeNotifierProvider<BinanceMarketViewModel>(
+        create: (_) => sl<BinanceMarketViewModel>(),
       ),
       //changeNotifierProvider<ProductDetailProvider>(
       //create:(_) => sl<ProductDetailProvider> ()),
