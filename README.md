@@ -1,64 +1,76 @@
-# Ứng dụng thông tin thị trường tiền mã hóa
+# Crypto Market & Trading-Ready App (Binance + CoinGecko)
 
-Ứng dụng Flutter chỉ đọc dữ liệu thị trường. Tài liệu này mô tả hiện trạng và
-kế hoạch chuyển sang **Binance Spot**; việc chuyển đổi **chưa được triển khai**.
+Ứng dụng Flutter theo dõi thị trường tiền mã hóa (Binance Spot real-time + CoinGecko metadata/overview) theo khung kiến trúc chuẩn của **HHM.MobileApp** (**MVVM + Provider + `get_it` + `go_router` + `Result<T>`**), mở rộng cho:
+- **Offline-first sync** (SQLite + WebSocket auto-reconnect).
+- **Safe Demo / Paper Trading trước** (`USE_DEMO_TRADING=true`, khóa mặc định giao dịch thật).
+- **AuthN / AuthZ Mock trước** (`USE_MOCK_API=true`, sẵn sàng cắm BFF / OIDC).
 
-## Hiện trạng
+> **View chỉ hiển thị – Provider điều phối – Repository gọi API/SQLite – Model giữ dữ liệu.**
 
-- Mã hiện tại dùng CoinGecko REST qua `DioApiClient`, `CoinRepository` và
-  `MarketRepository`. `ApiEndpoints` và cấu hình hiện vẫn là CoinGecko.
-- Dự án dùng Provider/ChangeNotifier, `get_it`, `go_router` và `Result<T>`.
-  Watchlist và một số tùy chọn được lưu cục bộ bằng `LocalStorage`.
-- Bản sửa đang làm ở token list vẫn gọi CoinGecko, nạp `TokenModel` rồi thay
-  danh sách bằng `CoinMarketModel` khi polling. Đây là hai kiểu khác nhau;
-  cần sửa trước khi đưa vào sử dụng.
+---
 
-## Mục tiêu: chỉ Binance
+## 1. Cấu trúc thư mục (Chuẩn HHM, không tách `features/`)
 
-| Nhu cầu | Thiết kế dự kiến | Giới hạn |
-|---|---|---|
-| Danh sách, tìm kiếm | REST `exchangeInfo`, lọc cặp Spot cục bộ | Là danh sách cặp giao dịch, không phải toàn bộ coin/token. |
-| Giá và 24h | REST ticker ban đầu + WebSocket Streams | Giá và khối lượng thuộc một cặp trên Binance, không phải toàn thị trường. |
-| Biểu đồ | REST klines + stream kline của cặp | Chỉ có lịch sử giao dịch của cặp trên Binance. |
-| Watchlist | Lưu symbol của cặp, nhận ticker tương ứng | Cần chuyển đổi dữ liệu ID CoinGecko cũ, không xóa dữ liệu không ánh xạ được. |
-| Vốn hóa, xếp hạng, tỷ trọng BTC, ngành, coin xu hướng | Chưa có nguồn tương đương trong Binance Spot market data | Không giả lập bằng dữ liệu sàn; cần thay đổi hoặc ẩn tính năng. |
-| Tên đầy đủ, logo, mô tả, contract, nguồn cung | Chưa có nguồn tương đương trong các endpoint dự kiến | Không hứa thay thế; hiển thị rõ dữ liệu không có. |
+```text
+lib/
+├─ main.dart                        # chỉ gọi AppBootstrap.run()
+├─ app.dart                         # GeckoApp (MaterialApp.router + theme + i18n)
+├─ app/
+│  ├─ app_boostrap.dart             # runZonedGuarded, DI, restoreSession, crash handler
+│  ├─ di/
+│  │  ├─ service_locator.dart       # get_it: publicApiClient, authApiClient, repos, VMs
+│  │  └─ app_providers.dart         # MultiProvider (AppState, Auth, Trading, 5 tabs)
+│  ├─ router/
+│  │  ├─ app_routes.dart            # path constants + requiresAuth() + requiredPermission()
+│  │  └─ app_router.dart            # go_router, shell 5 tab, AuthN/AuthZ redirect guard
+│  └─ theme/                        # màu, khoảng cách, ThemeData sáng/tối
+├─ core/
+│  ├─ config/                       # AppConfig, AppFlavor, AppConstants
+│  ├─ error/                        # Failure, FailureKind, ErrorMapper
+│  ├─ network/                      # ApiClient, DioApiClient, interceptors, ApiEndpoints
+│  ├─ result/                       # Result<T> (Ok/Err)
+│  ├─ storage/                      # LocalStorage, SecureStorage, TokenStorage, ImageCache
+│  └─ utils/                        # logger, formatters, validators, json_x, debouncer, jwt
+├─ data/
+│  ├─ datasource/                   # SQLite: binance_market.db & paper_trading.db
+│  ├─ sources/mock/                 # MockApiClient + MockFixtures (Auth & Demo Trading)
+│  ├─ model/                        # binance, crypto, auth, trading, system
+│  └─ repository/                   # binance_market, coingecko/market, auth, trading, system
+├─ providers/                       # BaseViewModel + Auth, Trading, BinanceMarket, Market, Global, Watchlist
+├─ services/                        # analytics, crash, deep_link, device_info, navigation, share, update
+├─ views/
+│  ├─ screens/                      # auth, binance_home, coin, watchlist, market, globalStats, trading, profile, settings, onBoarding, main
+│  └─ widgets/                      # coin_logo, price_change, sparkline, state_views, coin/show_order, market/market_overview, watchlist/watchlist_select
+└─ i18n/                            # vi_VN.json, en_US.json
+```
 
-USDT không phải USD: nhãn và định dạng phải thể hiện đúng quote asset
-(`BTC/USDT`), không tự nhận là giá USD.
+---
 
-## Tài liệu
+## 2. Nguyên tắc An toàn Giao dịch & Bảo mật
 
-- [Endpoint và hợp đồng Binance dự kiến](all_api_formatted.md).
-- [Kiến trúc repository/provider và vòng đời kết nối](docs/architecture/repositories-providers.md).
-- [Danh sách tài liệu chức năng](docs/features/home.md), gồm
-  [token list](docs/features/token-list.md), [thị trường](docs/features/market.md),
-  [theo dõi](docs/features/watchlist.md), [tìm kiếm](docs/features/search.md),
-  [chi tiết](docs/features/coin-detail.md), [biểu đồ](docs/features/market-chart.md),
-  [tổng quan](docs/features/global-stats.md) và [điều hướng](docs/features/navigation-shell.md).
-- [Kế hoạch ban đầu](binance_plan.md) nói về **WebSocket API** dạng request/response;
-  giá đẩy liên tục dùng **WebSocket Streams**, là giao thức/địa chỉ khác.
+1. **Mock / Demo mặc định:** `USE_MOCK_API=true`, `USE_DEMO_TRADING=true`, `ENABLE_LIVE_TRADING=false`. Mọi màn giao dịch gắn nhãn `DEMO / PAPER`.
+2. **Không giữ secret sàn trong client:** Không đưa `env/*.json` vào `pubspec.yaml` assets và phải gitignore `env/*.json` (chỉ commit `*.example.json`). Giao dịch thật sau này chỉ đi qua **Trading BFF** đã xác thực.
+3. **Tách 2 HTTP Client:** `publicApiClient` (CoinGecko & Binance public — **không** gắn `AuthInterceptor`) và `authApiClient` (Auth & Trading BFF — gắn `AuthInterceptor` + `TokenStorage`).
+4. **View không tự chốt lệnh:** Mọi kiểm tra quyền (`guest` / `demoTrader` / `verifiedTrader`), kiểm tra số dư, giá stale, chống gửi trùng (`clientOrderId`) nằm ở `TradingProvider` / `TradingRepository`.
+5. **Khóa kép Live Trading:** Chỉ mở khi đồng thời có `ENABLE_LIVE_TRADING=true` + `RemoteConfig.isEnabled('live_trading')` + quyền `tradeLive` + xác nhận 2 bước.
 
-## Cách chạy và kiểm tra
+---
 
-Cần Flutter SDK tương thích với ràng buộc Dart trong `pubspec.yaml`
-(`>=3.6.0 <4.0.0`).
+## 3. Biến môi trường (`--dart-define-from-file`)
+
+Chỉ liệt kê **tên biến** (giá trị thật nằm ở `env/{flavor}.json`, không commit):
+`FLAVOR`, `API_BASE_URL`, `TRADING_API_BASE_URL`, `WEB_BASE_URL`, `CDN_BASE_URL`, `API_TIMEOUT_SECONDS`, `USE_MOCK_API`, `USE_DEMO_TRADING`, `ENABLE_LIVE_TRADING`, `ENABLE_LOGGING`, `SENTRY_DSN`, `DEFAULT_LOCALE`.
 
 ```powershell
 flutter pub get
-flutter run
+flutter run --dart-define-from-file=env/dev.json
 flutter analyze
 flutter test
 ```
 
-Sau khi triển khai, kiểm thử snapshot, stream, reconnect, trạng thái mạng và
-chuyển dữ liệu watchlist bằng fake server; kiểm tra thực tế trên Android/iOS
-và mạng/địa bàn triển khai. Không coi việc có kết nối Internet là bảo đảm
-Binance có thể truy cập.
+## 4. Tài liệu
 
-## Nguồn tham khảo
-
-- [Binance Spot WebSocket Streams](https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md)
-- [Binance Spot REST API](https://github.com/binance/binance-spot-api-docs/blob/master/rest-api.md)
-- [Binance Spot WebSocket API](https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-api.md)
-- [Flutter: giao tiếp WebSocket](https://docs.flutter.dev/cookbook/networking/web-sockets)
+- [Kiến trúc Chi tiết & Kế hoạch Refactor](crypto_market_info_app_readme.md)
+- [Sơ đồ Hệ thống (As-Is & Target)](project_diagrams.md)
+- [Hợp đồng Binance Spot Market Data](all_api_formatted.md)
+- [Ghi chú Binance WebSocket API](binance_plan.md)

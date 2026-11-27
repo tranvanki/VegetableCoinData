@@ -4,7 +4,7 @@
   "WEB_BASE_URL": "https://www.coingecko.com",
   "CDN_BASE_URL": "https://coin-images.coingecko.com/",
   "API_TIMEOUT_SECONDS": "30",
-  "USE_MOCK_API": "false",
+  "USE_MOCK_API": "true",
   "ENABLE_LOGGING": "true",
   "SENTRY_DSN": "",
   "DEFAULT_LOCALE": "vi_VN"

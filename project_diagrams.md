@@ -1,167 +1,201 @@
-# Sơ đồ dự án
+# Sơ đồ Dự án (Chuẩn HHM · Binance Trading-Ready)
 
-Các sơ đồ mô tả **mã hiện tại**, không phải kế hoạch chuyển đổi. Ứng dụng
-đang có hai luồng dữ liệu thị trường: Binance cho màn hình Home và CoinGecko
-cho danh sách/thị trường/tổng quan/watchlist. Một số màn hình chi tiết và giao
-dịch vẫn là giao diện minh hoạ.
+Tách rõ **Phần 1: Hiện trạng mã nguồn** và **Phần 2: Kiến trúc Đích (Safe Demo Mock First + AuthN/AuthZ Mock trên cấu trúc tầng HHM)**.
 
-## Use case
+---
+
+## Phần 1: Hiện trạng (As-Is)
 
 ```mermaid
 flowchart LR
-    user[Người dùng]
-    binanceRest[Binance REST API]
-    binanceStream[Binance WebSocket Stream]
-    coinGecko[CoinGecko REST API]
-    local[(Lưu trữ trên thiết bị)]
+    user["Người dùng"]
+    binance["Binance REST + WS Stream"]
+    coingecko["CoinGecko REST API"]
+    local[("SQLite binance_coins + SharedPreferences")]
 
-    subgraph app[Ứng dụng Flutter]
-        home((Xem cặp Binance<br/>và giá trực tiếp))
-        pairSearch((Tìm cặp theo symbol))
-        pairDetail((Mở trang chi tiết cặp<br/>UI minh hoạ))
-        market((Xem thị trường<br/>lọc, sắp xếp, phân trang))
-        trending((Xem coin thịnh hành))
-        overview((Xem thống kê toàn cầu,<br/>ngành và biến động))
-        watchlist((Quản lý watchlist<br/>thêm, xoá, xem giá))
-        discover((Tải và lọc danh sách token))
-        search((Nhận gợi ý tìm kiếm))
-        preferences((Đổi ngôn ngữ,<br/>giao diện và onboarding))
-        demoOrder((Mở form mua/bán demo))
+    subgraph app["Ứng dụng Flutter (Hiện trạng)"]
+        home(("Tab 0: BinanceHomeScreen"))
+        detail(("CoinDetail + showPaperOrder tạm"))
+        watchlist(("Tab 1: WatchlistScreen"))
+        market(("Tab 2: MarketScreen"))
+        global(("Tab 3: GlobalScreen"))
     end
 
     user --> home
-    user --> pairSearch
-    user --> pairDetail
-    user --> market
-    user --> trending
-    user --> overview
+    user --> detail
     user --> watchlist
-    user --> discover
-    user --> search
-    user --> preferences
-    user --> demoOrder
+    user --> market
+    user --> global
 
-    home --> binanceRest
-    home --> binanceStream
+    home --> binance
     home --> local
-    home -. metadata .-> coinGecko
-    market --> coinGecko
-    trending --> coinGecko
-    overview --> coinGecko
-    watchlist --> coinGecko
+    home -. "metadata (WIP)" .-> coingecko
+    watchlist --> coingecko
     watchlist --> local
-    discover --> coinGecko
-    search --> coinGecko
-    preferences --> local
-    pairDetail -. giá được truyền từ màn Home .-> home
+    market --> coingecko
+    global --> coingecko
 ```
 
-`Mở form mua/bán demo` không thực hiện lệnh Binance. Watchlist lưu CoinGecko ID
-ở SharedPreferences; nó không dùng cặp Binance được lưu trong SQLite.
+---
 
-## Class diagram
+## Phần 2: Kiến trúc Đích (HHM Layer-First · Trading-Ready)
+
+### 2.1 Trust Boundary & Use Case
+
+```mermaid
+flowchart LR
+    guest["Guest"]
+    demo["Demo Trader (Mock Auth)"]
+    verified["Verified Trader (Future Live)"]
+
+    subgraph publicZone["PublicApiClient (Không AuthInterceptor)"]
+        binance["Binance Spot REST + WS"]
+        coingecko["CoinGecko REST"]
+    end
+
+    subgraph localZone["Lưu trữ cục bộ thiết bị"]
+        secure[("SecureStorage + TokenStorage")]
+        marketDb[("SQLite: binance_market.db")]
+        demoDb[("SQLite: paper_trading.db")]
+        prefs[("LocalStorage / SharedPreferences")]
+    end
+
+    subgraph authZone["AuthApiClient (AuthInterceptor / MockApiClient)"]
+        mockApi["MockApiClient + MockFixtures (Mặc định)"]
+        bff["Auth & Trading BFF (Tương lai - Server giữ Exchange Keys)"]
+    end
+
+    subgraph app["5 Tab Shell + Auth/Trading"]
+        t0(("Tab 0-3: Market, Binance, Watchlist, Global"))
+        t4(("Tab 4: Profile, Login, Role Mock, Settings"))
+        trade(("Demo Paper Order + Order History"))
+        live(("Live Order - Khóa 4 lớp"))
+    end
+
+    guest --> t0
+    guest --> t4
+    demo --> t0
+    demo --> t4
+    demo --> trade
+    verified --> trade
+    verified -. "Chỉ mở khi đủ 4 điều kiện" .-> live
+
+    t0 --> binance
+    t0 --> coingecko
+    t0 --> marketDb
+    t0 --> prefs
+    t4 --> secure
+    t4 --> mockApi
+    t4 -. "USE_MOCK_API=false" .-> bff
+    trade --> demoDb
+    trade -. "Giá live" .-> marketDb
+    live -. "Future LiveTradingRepository" .-> bff
+```
+
+### 2.2 Class Diagram (Theo đúng thư mục `core/` · `data/` · `providers/` · `views/`)
 
 ```mermaid
 classDiagram
     class BinanceHomeScreen
-    class MarketScreen
-    class GlobalScreen
-    class WatchlistScreen
+    class CoinDetail
+    class LoginScreen
+    class ProfileScreen
+    class OrderHistoryScreen
 
+    class AuthProvider {
+        +AuthSession? session
+        +UserRole role
+        +bool isAuthenticated
+        +restoreSession()
+        +login()
+        +logout()
+        +switchMockRole()
+    }
+    class TradingProvider {
+        +TradingMode mode
+        +DemoAccount? account
+        +List~Position~ positions
+        +List~OrderRecord~ orders
+        +previewOrder()
+        +placeOrder()
+        +resetDemoAccount()
+    }
     class BinanceMarketViewModel
-    class MarketProvider
-    class GlobalProvider
-    class WatchListProvider
-    class SearchProvider
-    class TokenListProvider
 
+    class AuthRepository {
+        <<interface>>
+    }
+    class TradingRepository {
+        <<interface>>
+    }
     class BinanceMarketRepository {
         <<interface>>
-        +start()
-        +refresh()
-        +stop()
-        +updates
-        +connectionStatuses
     }
-    class BinanceMarketRepositoryImpl
-    class CoinRepository
-    class MarketRepository
-    class SystemRepository
+    class CoinGeckoRepository
 
-    class BinanceMarketLocalDataSource {
-        +getCoins()
-        +getCoin(symbol)
-        +upsertCoins(coins)
-        +clear()
-    }
-    class ApiClient {
-        <<interface>>
-    }
-    class DioApiClient
-    class NetworkInfo
-    class LocalStorage
+    class TokenStorage
+    class SecureStorage
+    class MockApiClient
+    class PaperTradingLocalDataSource
+    class BinanceMarketLocalDataSource
+    class PublicApiClient
+    class AuthApiClient
 
-    class BinanceCoin {
-        +symbol: String
-        +baseAsset: String
-        +quoteAsset: String
-        +price: double?
-        +change24h: double?
-        +baseVolume: double?
-        +quoteVolume: double?
-        +tradingEnabled: bool
-        +marketCap: double?
-    }
-    class CoinMarketModel {
-        +id: String
-        +symbol: String
-        +name: String
-        +currentPrice: double?
-        +marketCap: double?
-        +marketCapRank: int?
-    }
-    class CoinCategory
-    class GlobalStats
-    class TokenModel
+    LoginScreen --> AuthProvider
+    ProfileScreen --> AuthProvider
+    ProfileScreen --> TradingProvider
+    OrderHistoryScreen --> TradingProvider
+    CoinDetail --> TradingProvider
+    BinanceHomeScreen --> BinanceMarketViewModel
 
-    BinanceHomeScreen --> BinanceMarketViewModel : observes
-    MarketScreen --> MarketProvider : observes
-    GlobalScreen --> GlobalProvider : observes
-    WatchlistScreen --> WatchListProvider : observes
+    AuthProvider --> AuthRepository
+    AuthRepository --> TokenStorage
+    AuthRepository --> MockApiClient : USE_MOCK_API=true
+    AuthRepository --> AuthApiClient : USE_MOCK_API=false
+    TokenStorage --> SecureStorage
 
-    BinanceMarketViewModel --> BinanceMarketRepository : uses
-    MarketProvider --> MarketRepository : uses
-    GlobalProvider --> MarketRepository : uses
-    WatchListProvider --> MarketRepository : loads prices
-    WatchListProvider --> LocalStorage : saves IDs
-    SearchProvider --> CoinRepository : suggestions
-    SearchProvider --> LocalStorage : history
-    TokenListProvider --> CoinRepository : token data
+    TradingProvider --> TradingRepository
+    TradingProvider --> AuthProvider : AuthZ check
+    TradingProvider --> BinanceMarketRepository : live price
+    TradingRepository --> PaperTradingLocalDataSource : Demo mode
+    TradingRepository --> AuthApiClient : Future Live BFF
 
-    BinanceMarketRepositoryImpl ..|> BinanceMarketRepository
-    BinanceMarketRepositoryImpl --> BinanceMarketLocalDataSource : cache
-    BinanceMarketRepositoryImpl --> NetworkInfo : connectivity
-    BinanceMarketRepositoryImpl --> CoinRepository : optional metadata
-    BinanceMarketRepositoryImpl --> BinanceCoin : emits
-    BinanceMarketLocalDataSource --> BinanceCoin : maps SQLite rows
-
-    CoinRepository --> ApiClient : requests
-    MarketRepository --> ApiClient : requests
-    SystemRepository --> LocalStorage : reads config
-    DioApiClient ..|> ApiClient
-
-    CoinRepository ..> TokenModel : parses
-    CoinRepository ..> CoinMarketModel : parses
-    MarketRepository ..> CoinMarketModel : parses
-    MarketRepository ..> CoinCategory : parses
-    MarketRepository ..> GlobalStats : parses
+    BinanceMarketViewModel --> BinanceMarketRepository
+    BinanceMarketRepository --> BinanceMarketLocalDataSource
+    BinanceMarketRepository --> CoinGeckoRepository : metadata
+    CoinGeckoRepository --> PublicApiClient
 ```
 
-`CoinMarketModel`, `CoinCategory`, `GlobalStats` và `TokenModel` là model của
-dữ liệu API; chúng không phải các bảng trong SQLite. `BinanceCoin` là model
-cho snapshot Binance cục bộ.
+### 2.3 Sequence: Đặt lệnh Paper Trading An Toàn
 
-## ERD lưu trữ cục bộ
+```mermaid
+sequenceDiagram
+    actor User
+    participant UI as CoinDetail / showPaperOrder
+    participant Auth as AuthProvider (AuthN/AuthZ)
+    participant VM as TradingProvider
+    participant Repo as TradingRepository (Demo)
+    participant DB as paper_trading.db
+
+    User->>UI: Nhấn Mua/Bán + nhập số lượng
+    UI->>Auth: Kiểm tra isAuthenticated & canTradeDemo
+    alt Guest
+        Auth-->>UI: Chưa đăng nhập
+        UI-->>User: Điều hướng /auth/login
+    else DemoTrader
+        UI->>VM: previewOrder(symbol, side, qty)
+        VM-->>UI: Tổng tiền + kiểm tra số dư + nhãn DEMO
+        User->>UI: Xác nhận "LỆNH DEMO - KHÔNG TIỀN THẬT"
+        UI->>VM: placeOrder(request + clientOrderId)
+        VM->>Repo: placeOrder(request)
+        Repo->>DB: Transaction: check idempotency + cập nhật số dư/vị thế + lưu lệnh
+        DB-->>Repo: OrderRecord (mode: demo, status: filled)
+        Repo-->>VM: Ok(OrderRecord)
+        VM-->>UI: Cập nhật ví & lịch sử Demo
+    end
+```
+
+### 2.4 ERD SQLite Cục bộ
 
 ```mermaid
 erDiagram
@@ -179,21 +213,46 @@ erDiagram
         REAL market_cap
         TEXT last_updated
     }
+
+    DEMO_ACCOUNTS {
+        TEXT user_id PK
+        TEXT quote_asset
+        REAL available_balance
+        REAL initial_balance
+        TEXT updated_at
+    }
+
+    DEMO_POSITIONS {
+        TEXT user_id PK
+        TEXT symbol PK
+        TEXT base_asset
+        REAL quantity
+        REAL avg_entry_price
+        TEXT updated_at
+    }
+
+    DEMO_ORDERS {
+        TEXT client_order_id PK
+        TEXT user_id FK
+        TEXT symbol
+        TEXT side
+        TEXT order_type
+        TEXT execution_mode
+        REAL quantity
+        REAL executed_price
+        REAL total_quote
+        REAL fee_quote
+        TEXT status
+        TEXT created_at
+    }
+
+    DEMO_ACCOUNTS ||--o{ DEMO_POSITIONS : "owns"
+    DEMO_ACCOUNTS ||--o{ DEMO_ORDERS : "places"
 ```
 
-SQLite hiện chỉ tạo bảng `binance_coins`; `base_asset` có index nhưng không có
-foreign key. Dữ liệu còn lại được lưu riêng bằng SharedPreferences, không phải
-bảng quan hệ:
-
-| Khoá | Dữ liệu |
+| Kho lưu trữ | Dữ liệu |
 |---|---|
-| `watchlist_coin_ids` | Danh sách CoinGecko ID được theo dõi |
-| `coingecko.recent_search` | Lịch sử từ khoá tìm kiếm |
-| `coingecko.recent_viewed` | Danh sách token xem gần đây dạng JSON |
-| `coingecko.locale`, `coingecko.theme_mode` | Tuỳ chọn ngôn ngữ và giao diện |
-| `coingecko.onboarding_seen` | Trạng thái onboarding |
-| `coingecko.remote_config` | Cấu hình cache cục bộ |
-| `coingecko.device_id` | Mã thiết bị |
-
-Không có tài khoản người dùng, danh mục đầu tư, lệnh giao dịch hay quan hệ
-foreign key được lưu trong cơ sở dữ liệu hiện tại.
+| `binance_market.db` (SQLite) | `binance_coins` (offline-first Binance snapshot) |
+| `paper_trading.db` (SQLite) | `demo_accounts`, `demo_positions`, `demo_orders` |
+| `SecureStorage` (`flutter_secure_storage`) | `access_token`, `refresh_token`, `token_expires_at`, `mock_role` |
+| `LocalStorage` (`SharedPreferences`) | `watchlist_coin_ids`, `locale`, `theme_mode`, `onboarding_seen`, `remote_config`, `device_id` |
